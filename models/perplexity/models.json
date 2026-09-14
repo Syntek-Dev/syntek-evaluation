@@ -1,0 +1,81 @@
+{
+  "provider": "perplexity",
+  "access_method": "perplexity_cli_api_key",
+  "authentication_evidence": "operator_reported",
+  "current_access_verified": false,
+  "generated_at": "2026-09-14T16:08:51Z",
+  "client": {
+    "name": "pplx",
+    "version": "2026.07.30.1785394496+1b7382b"
+  },
+  "sources": [
+    {
+      "path": "/home/sam-dev/.local/bin/pplx",
+      "modified_at": "2026-09-14T16:02:14Z",
+      "metadata_commands": [
+        [
+          "--version"
+        ],
+        [
+          "search",
+          "web",
+          "--help"
+        ],
+        [
+          "content",
+          "fetch",
+          "--help"
+        ],
+        [
+          "content",
+          "snippets",
+          "--help"
+        ]
+      ]
+    },
+    {
+      "path": "/home/sam-dev/.config/pplx/pplx-receipt.json",
+      "modified_at": "2026-09-14T16:02:14Z",
+      "recorded_version": "2026.07.30.1785394496+1b7382b",
+      "installation_source": "github:perplexityai/perplexity-cli"
+    }
+  ],
+  "configured": {
+    "model": null,
+    "reasoning_effort": null
+  },
+  "model_list_scope": "No model IDs discovered by this local metadata probe; the observed commands are search/content tools. Local help verifies command availability; API access has not been verified.",
+  "models": [],
+  "tools": [
+    {
+      "id": "web_search",
+      "command": [
+        "pplx",
+        "search",
+        "web"
+      ],
+      "availability": "declared_by_installed_cli",
+      "current_access_verified": false
+    },
+    {
+      "id": "content_fetch",
+      "command": [
+        "pplx",
+        "content",
+        "fetch"
+      ],
+      "availability": "declared_by_installed_cli",
+      "current_access_verified": false
+    },
+    {
+      "id": "content_snippets",
+      "command": [
+        "pplx",
+        "content",
+        "snippets"
+      ],
+      "availability": "declared_by_installed_cli",
+      "current_access_verified": false
+    }
+  ]
+}

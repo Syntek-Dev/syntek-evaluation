@@ -1,0 +1,29 @@
+# Python environments and generated files
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local data, model weights, and agent configuration
+/cache/
+/datasets/
+/models/ollama
+/.agents/
+/.codex/
+
+# Credentials, backups, and editor files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.bak
+*.swp
+*~
+.DS_Store

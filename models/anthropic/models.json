@@ -1,0 +1,61 @@
+{
+  "provider": "anthropic",
+  "access_method": "claude_code_subscription",
+  "generated_at": "2026-09-14T16:08:50Z",
+  "sources": [
+    {
+      "path": "/home/sam-dev/.claude/stats-cache.json",
+      "modified_at": "2026-09-14T11:19:10Z",
+      "last_computed_date": "2026-09-13"
+    },
+    {
+      "path": "/home/sam-dev/.claude/settings.json",
+      "modified_at": "2026-09-14T14:53:22Z"
+    },
+    {
+      "path": "/home/sam-dev/.claude.json",
+      "modified_at": "2026-09-14T15:02:55Z",
+      "additional_model_options_answered_at_unix_ms": 1789397631145
+    }
+  ],
+  "configured": {
+    "model": null,
+    "reasoning_effort": "xhigh"
+  },
+  "available_models_setting": null,
+  "model_list_scope": "Historical model IDs and additional picker options from local caches; not a complete current model list.",
+  "models": [
+    {
+      "id": "claude-fable-5",
+      "availability": "historically_observed",
+      "current_access_verified": false,
+      "observed_in_history": true
+    },
+    {
+      "id": "claude-fable-5-1[1m]",
+      "display_name": "Fable",
+      "description": "Fable 5.1 · Most capable for your hardest and longest-running tasks",
+      "availability": "listed_in_claude_picker_cache",
+      "current_access_verified": false,
+      "observed_in_history": false
+    },
+    {
+      "id": "claude-haiku-4-5-20251001",
+      "availability": "historically_observed",
+      "current_access_verified": false,
+      "observed_in_history": true
+    },
+    {
+      "id": "claude-opus-4-8",
+      "availability": "historically_observed",
+      "current_access_verified": false,
+      "observed_in_history": true
+    },
+    {
+      "id": "claude-opus-5",
+      "availability": "historically_observed",
+      "current_access_verified": false,
+      "observed_in_history": true
+    }
+  ]
+}

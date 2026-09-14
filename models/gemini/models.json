@@ -1,0 +1,84 @@
+{
+  "provider": "google",
+  "access_method": "gemini_cli_api_key",
+  "generated_at": "2026-09-14T16:08:51Z",
+  "client": {
+    "name": "@google/gemini-cli",
+    "version": "0.59.0"
+  },
+  "sources": [
+    {
+      "path": "/home/sam-dev/.gemini/settings.json",
+      "modified_at": "2026-09-14T15:50:05Z"
+    },
+    {
+      "path": "/home/sam-dev/.nvm/versions/node/v24.13.0/lib/node_modules/@google/gemini-cli/package.json",
+      "modified_at": "2026-09-14T15:47:14Z"
+    },
+    {
+      "path": "/home/sam-dev/.nvm/versions/node/v24.13.0/lib/node_modules/@google/gemini-cli/bundle/chunk-YSBB75DZ.js",
+      "modified_at": "2026-09-14T15:47:14Z"
+    }
+  ],
+  "configured": {
+    "model": null,
+    "reasoning_effort": null
+  },
+  "cli_default_alias": "auto",
+  "aliases": [
+    "auto",
+    "auto-gemini-2.5",
+    "auto-gemini-3",
+    "flash",
+    "flash-lite",
+    "pro"
+  ],
+  "model_list_scope": "Gemini model IDs declared in the installed CLI's VALID_GEMINI_MODELS set; not the full provider catalog or dynamic configuration. Aliases are CLI selectors, not resolved model IDs. API access has not been verified.",
+  "models": [
+    {
+      "id": "gemini-2.5-flash",
+      "availability": "declared_by_installed_cli",
+      "current_access_verified": false
+    },
+    {
+      "id": "gemini-2.5-pro",
+      "availability": "declared_by_installed_cli",
+      "current_access_verified": false
+    },
+    {
+      "id": "gemini-3-flash",
+      "availability": "declared_by_installed_cli",
+      "current_access_verified": false
+    },
+    {
+      "id": "gemini-3-flash-preview",
+      "availability": "declared_by_installed_cli",
+      "current_access_verified": false
+    },
+    {
+      "id": "gemini-3-pro-preview",
+      "availability": "declared_by_installed_cli",
+      "current_access_verified": false
+    },
+    {
+      "id": "gemini-3.1-flash-lite",
+      "availability": "declared_by_installed_cli",
+      "current_access_verified": false
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "availability": "declared_by_installed_cli",
+      "current_access_verified": false
+    },
+    {
+      "id": "gemini-3.1-pro-preview-customtools",
+      "availability": "declared_by_installed_cli",
+      "current_access_verified": false
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "availability": "declared_by_installed_cli",
+      "current_access_verified": false
+    }
+  ]
+}

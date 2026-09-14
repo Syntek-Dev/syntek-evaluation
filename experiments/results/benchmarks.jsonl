@@ -1,0 +1,202 @@
+{
+  "id": "AI01-0001",
+  "timestamp": "2026-09-14T10:02:51+01:00",
+  "machine": "AI01",
+  "runtime": "ollama",
+  "runtime_version": "0.34.0",
+  "model": "qwen3.6:35b-a3b",
+  "prompt": "python-production-code-review",
+  "status": "valid",
+  "prompt_tokens": 93,
+  "output_tokens": 3739,
+  "prompt_duration_ns": 1367679000,
+  "output_duration_ns": 92298213000,
+  "total_duration_ns": 103584581315,
+  "load_duration_ns": 9916484931,
+  "prompt_tokens_per_second": 67.99841190805736,
+  "generation_tokens_per_second": 40.50999340583116,
+  "total_duration_seconds": 103.585,
+  "wall_duration_seconds": 103.602
+}
+{"id":"LEGACY-AI01-0001","timestamp":"2026-09-14","machine":"AI01","runtime":"ollama","runtime_version":"0.34.0","model":"aga/OLMoE:latest","prompt":"linux-process-thread","status":"legacy","prompt_tokens":30,"output_tokens":213,"prompt_duration_ns":4019000,"output_duration_ns":676487000,"total_duration_ns":706228770,"load_duration_ns":491976,"prompt_tokens_per_second":7464.5434,"generation_tokens_per_second":314.8619,"total_duration_seconds":0.706,"notes":"Historical benchmark captured before automated harness."}
+{"id":"LEGACY-AI01-0002","timestamp":"2026-09-14","machine":"AI01","runtime":"ollama","runtime_version":"0.34.0","model":"qwen3.6:35b-a3b","prompt":"linux-systemd","status":"legacy","prompt_tokens":27,"output_tokens":2038,"prompt_duration_ns":283077000,"output_duration_ns":51326270000,"total_duration_ns":51677486187,"load_duration_ns":1160313,"prompt_tokens_per_second":95.3804,"generation_tokens_per_second":39.7068,"total_duration_seconds":51.677,"notes":"Historical benchmark captured before automated harness."}
+{"id":"LEGACY-AI01-0003","timestamp":"2026-09-14","machine":"AI01","runtime":"ollama","runtime_version":"0.34.0","model":"qwen3.6:35b-a3b","prompt":"python-directory-search","status":"legacy","prompt_tokens":48,"output_tokens":4046,"prompt_duration_ns":966305000,"output_duration_ns":93510679000,"total_duration_ns":94549618448,"load_duration_ns":516301,"prompt_tokens_per_second":49.6738,"generation_tokens_per_second":43.2678,"total_duration_seconds":94.550,"notes":"Historical benchmark captured before automated harness."}
+{"id":"LEGACY-AI01-0004","timestamp":"2026-09-14","machine":"AI01","runtime":"ollama","runtime_version":"0.34.0","model":"qwen3.6:35b-a3b","prompt":"invalid-production-code-review-harness","status":"invalid","prompt_tokens":271,"output_tokens":2459,"prompt_duration_ns":1200000000,"output_duration_ns":60193900000,"prompt_tokens_per_second":2261.93,"generation_tokens_per_second":40.869,"total_duration_seconds":60.394,"notes":"INVALID: prompt fixture accidentally contained the shell benchmark command rather than the intended Python review task."}
+{"id":"LEGACY-AI01-0005","timestamp":"2026-09-14","machine":"AI01","runtime":"ollama","runtime_version":"0.34.0","model":"qwen3.6:35b-a3b","prompt":"python-production-code-review","status":"legacy","prompt_tokens":93,"output_tokens":4002,"prompt_duration_ns":1314159000,"output_duration_ns":102342892000,"total_duration_ns":103758119343,"load_duration_ns":459026,"prompt_tokens_per_second":70.7677,"generation_tokens_per_second":39.1038,"total_duration_seconds":103.758,"notes":"Historical benchmark captured before automated harness. Qualitative assessment approximately 6.5-7/10; notable issues in path containment, exception coverage, atomicity reasoning, schema validation and testing judgement."}
+{
+  "id": "AI01-0002",
+  "timestamp": "2026-09-14T11:04:19+01:00",
+  "machine": "AI01",
+  "runtime": "ollama",
+  "runtime_version": "0.34.0",
+  "model": "qwen3.6:35b-a3b",
+  "prompt": "python-production-code-review",
+  "status": "valid",
+  "prompt_tokens": 93,
+  "output_tokens": 2664,
+  "prompt_duration_ns": 1342386000,
+  "output_duration_ns": 64056929000,
+  "total_duration_ns": 74807226971,
+  "load_duration_ns": 9405591100,
+  "prompt_tokens_per_second": 69.27962597941277,
+  "generation_tokens_per_second": 41.58800681812268,
+  "total_duration_seconds": 74.807,
+  "wall_duration_seconds": 74.821,
+  "cpu": {
+    "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+    "cores": 8,
+    "threads": 16
+  },
+  "ollama_runtime": {
+    "processor": "64%/36% CPU/GPU",
+    "context": "4096"
+  },
+  "system_before": {
+    "ram": {
+      "total_bytes": 33560596480,
+      "used_bytes": 5763072000,
+      "available_bytes": 27797524480
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 2080 Ti",
+      "vram_total_mb": 11264,
+      "vram_used_mb": 890,
+      "utilisation_percent": 10,
+      "temperature_c": 45,
+      "power_watts": 46.60
+    }
+  },
+  "system_after": {
+    "ram": {
+      "total_bytes": 33560596480,
+      "used_bytes": 6561538048,
+      "available_bytes": 26999058432
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 2080 Ti",
+      "vram_total_mb": 11264,
+      "vram_used_mb": 10009,
+      "utilisation_percent": 37,
+      "temperature_c": 51,
+      "power_watts": 79.07
+    }
+  }
+}
+{
+  "id": "AI01-0003",
+  "timestamp": "2026-09-14T11:07:03+01:00",
+  "machine": "AI01",
+  "runtime": "ollama",
+  "runtime_version": "0.34.0",
+  "model": "aga/OLMoE:latest",
+  "prompt": "linux-process-thread",
+  "status": "valid",
+  "prompt_tokens": 157,
+  "output_tokens": 791,
+  "prompt_duration_ns": 133175999,
+  "output_duration_ns": 2571770000,
+  "total_duration_ns": 9076311132,
+  "load_duration_ns": 6317234149,
+  "prompt_tokens_per_second": 1178.8911003400847,
+  "generation_tokens_per_second": 307.57027261380296,
+  "total_duration_seconds": 9.076,
+  "wall_duration_seconds": 9.112,
+  "cpu": {
+    "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+    "cores": 8,
+    "threads": 16
+  },
+  "ollama_runtime": {
+    "processor": "100% GPU",
+    "context": "4096"
+  },
+  "system_before": {
+    "ram": {
+      "total_bytes": 33560596480,
+      "used_bytes": 6533414912,
+      "available_bytes": 27027181568
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 2080 Ti",
+      "vram_total_mb": 11264,
+      "vram_used_mb": 10063,
+      "utilisation_percent": 10,
+      "temperature_c": 46,
+      "power_watts": 45.90
+    }
+  },
+  "system_after": {
+    "ram": {
+      "total_bytes": 33560596480,
+      "used_bytes": 5391917056,
+      "available_bytes": 28168679424
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 2080 Ti",
+      "vram_total_mb": 11264,
+      "vram_used_mb": 5613,
+      "utilisation_percent": 95,
+      "temperature_c": 56,
+      "power_watts": 111.96
+    }
+  }
+}
+{
+  "id": "AI01-0004",
+  "timestamp": "2026-09-14T11:10:23+01:00",
+  "machine": "AI01",
+  "runtime": "ollama",
+  "runtime_version": "0.34.0",
+  "model": "qwen3.6:35b-a3b",
+  "prompt": "linux-process-thread",
+  "status": "valid",
+  "prompt_tokens": 145,
+  "output_tokens": 2862,
+  "prompt_duration_ns": 1580433000,
+  "output_duration_ns": 84463318000,
+  "total_duration_ns": 108615390810,
+  "load_duration_ns": 22479619562,
+  "prompt_tokens_per_second": 91.74700857296703,
+  "generation_tokens_per_second": 33.8845319810903,
+  "total_duration_seconds": 108.615,
+  "wall_duration_seconds": 108.941,
+  "cpu": {
+    "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+    "cores": 8,
+    "threads": 16
+  },
+  "ollama_runtime": {
+    "processor": "65%/35% CPU/GPU",
+    "context": "4096"
+  },
+  "system_before": {
+    "ram": {
+      "total_bytes": 33560596480,
+      "used_bytes": 5453737984,
+      "available_bytes": 28106858496
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 2080 Ti",
+      "vram_total_mb": 11264,
+      "vram_used_mb": 5666,
+      "utilisation_percent": 11,
+      "temperature_c": 46,
+      "power_watts": 45.95
+    }
+  },
+  "system_after": {
+    "ram": {
+      "total_bytes": 33560596480,
+      "used_bytes": 5368770560,
+      "available_bytes": 28191825920
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 2080 Ti",
+      "vram_total_mb": 11264,
+      "vram_used_mb": 10577,
+      "utilisation_percent": 38,
+      "temperature_c": 54,
+      "power_watts": 78.04
+    }
+  }
+}
