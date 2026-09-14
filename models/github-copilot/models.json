@@ -1,0 +1,252 @@
+{
+  "provider": "github",
+  "access_method": "github_copilot_cli",
+  "authentication_evidence": "not_checked",
+  "subscription_plan": null,
+  "current_access_verified": false,
+  "generated_at": "2026-09-14T16:32:08Z",
+  "client": {
+    "name": "GitHub Copilot CLI",
+    "installed": true,
+    "version": "1.0.83"
+  },
+  "sources": [
+    {
+      "path": "/home/sam-dev/Repos/syntek/syntek-evaluation/models/github-copilot/observed-models.json",
+      "modified_at": "2026-09-14T16:30:43Z",
+      "schema_version": 1,
+      "observed_at": "2026-09-14T16:30:43Z",
+      "evidence": "copilot_cli_model_picker",
+      "model_id_source": "copilot_model_command_validation",
+      "client_version": "1.0.83"
+    },
+    {
+      "path": "/home/sam-dev/.local/bin/copilot",
+      "modified_at": "2026-09-04T15:25:45Z",
+      "evidence": "local_executable_present",
+      "metadata_commands": [
+        [
+          "--no-auto-update",
+          "--version"
+        ]
+      ]
+    }
+  ],
+  "configured": {
+    "model": null,
+    "reasoning_effort": null
+  },
+  "model_list_scope": "Recorded Copilot CLI model-picker observations at model_list_observed_at, plus any saved user-level model preference. Plan-blocked observations are listed separately under unavailable_models. Auto is a routing alias. Refresh preserves the original observation time and does not query the account model list. Picker entries and preferences do not establish successful inference or current access; account, client, and policy changes require a new observation. Editor integrations are outside this inventory.",
+  "models": [
+    {
+      "id": "claude-sonnet-5",
+      "display_name": "Claude Sonnet 5",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "claude-haiku-4.5",
+      "display_name": "Claude Haiku 4.5",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "display_name": "GPT-5.6 Terra",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "display_name": "GPT-5.6 Luna",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "gpt-5.4",
+      "display_name": "GPT-5.4",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "gpt-5.4-mini",
+      "display_name": "GPT-5.4 mini",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "gpt-5.3-codex",
+      "display_name": "GPT-5.3-Codex",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "gpt-5-mini",
+      "display_name": "GPT-5 mini",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "mai-code-1.1-flash",
+      "display_name": "MAI-Code-1.1-Flash",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "display_name": "Gemini 3.8 Flash",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "display_name": "Gemini 3.7 Flash",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "display_name": "Gemini 3.6 Flash",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "display_name": "Gemini 3.5 Flash",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "grok-4.5",
+      "display_name": "Grok 4.5",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "kimi-k3",
+      "display_name": "Kimi K3",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "display_name": "Kimi K2.7 Code",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    },
+    {
+      "id": "grok-4.6",
+      "display_name": "Grok 4.6",
+      "availability": "listed_in_copilot_model_picker",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false
+    }
+  ],
+  "unavailable_models": [
+    {
+      "id": "claude-fable-5.1",
+      "display_name": "claude-fable-5.1",
+      "availability": "blocked_by_copilot_plan",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "claude-fable-5",
+      "display_name": "claude-fable-5",
+      "availability": "blocked_by_copilot_plan",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "claude-opus-5",
+      "display_name": "claude-opus-5",
+      "availability": "blocked_by_copilot_plan",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "claude-opus-4.8",
+      "display_name": "claude-opus-4.8",
+      "availability": "blocked_by_copilot_plan",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "claude-opus-4.8-fast",
+      "display_name": "claude-opus-4.8-fast",
+      "availability": "blocked_by_copilot_plan",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "claude-opus-4.7",
+      "display_name": "claude-opus-4.7",
+      "availability": "blocked_by_copilot_plan",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "claude-sonnet-4.6",
+      "display_name": "claude-sonnet-4.6",
+      "availability": "blocked_by_copilot_plan",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "display_name": "gpt-5.6-sol",
+      "availability": "blocked_by_copilot_plan",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "gpt-5.5",
+      "display_name": "gpt-5.5",
+      "availability": "blocked_by_copilot_plan",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "mai-code-1-flash-picker",
+      "display_name": "mai-code-1-flash-picker",
+      "availability": "blocked_by_copilot_plan",
+      "observed_at": "2026-09-14T16:30:43Z",
+      "current_access_verified": false,
+      "restriction": "not_in_current_plan"
+    }
+  ],
+  "aliases": [
+    "auto"
+  ],
+  "observed_selection": {
+    "model": "gpt-5.6-terra",
+    "reasoning_effort": "medium"
+  },
+  "model_list_observed_at": "2026-09-14T16:30:43Z",
+  "model_list_complete": true
+}

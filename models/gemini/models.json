@@ -1,7 +1,7 @@
 {
   "provider": "google",
   "access_method": "gemini_cli_api_key",
-  "generated_at": "2026-09-14T16:08:51Z",
+  "generated_at": "2026-09-14T16:31:39Z",
   "client": {
     "name": "@google/gemini-cli",
     "version": "0.59.0"

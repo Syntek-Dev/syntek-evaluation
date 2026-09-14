@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-09-14T16:30:43Z",
+  "evidence": "copilot_cli_model_picker",
+  "model_id_source": "copilot_model_command_validation",
+  "client_version": "1.0.83",
+  "list_complete": true,
+  "selected": {
+    "model": "gpt-5.6-terra",
+    "reasoning_effort": "medium"
+  },
+  "aliases": [
+    "auto"
+  ],
+  "models": [
+    {
+      "id": "claude-sonnet-5",
+      "display_name": "Claude Sonnet 5",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "claude-haiku-4.5",
+      "display_name": "Claude Haiku 4.5",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "display_name": "GPT-5.6 Terra",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "display_name": "GPT-5.6 Luna",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "gpt-5.4",
+      "display_name": "GPT-5.4",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "gpt-5.4-mini",
+      "display_name": "GPT-5.4 mini",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "gpt-5.3-codex",
+      "display_name": "GPT-5.3-Codex",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "gpt-5-mini",
+      "display_name": "GPT-5 mini",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "mai-code-1.1-flash",
+      "display_name": "MAI-Code-1.1-Flash",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "display_name": "Gemini 3.8 Flash",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "display_name": "Gemini 3.7 Flash",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "display_name": "Gemini 3.6 Flash",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "display_name": "Gemini 3.5 Flash",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "grok-4.5",
+      "display_name": "Grok 4.5",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "kimi-k3",
+      "display_name": "Kimi K3",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "display_name": "Kimi K2.7 Code",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "grok-4.6",
+      "display_name": "Grok 4.6",
+      "selectable": true,
+      "restriction": null
+    },
+    {
+      "id": "claude-fable-5.1",
+      "display_name": "claude-fable-5.1",
+      "selectable": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "claude-fable-5",
+      "display_name": "claude-fable-5",
+      "selectable": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "claude-opus-5",
+      "display_name": "claude-opus-5",
+      "selectable": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "claude-opus-4.8",
+      "display_name": "claude-opus-4.8",
+      "selectable": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "claude-opus-4.8-fast",
+      "display_name": "claude-opus-4.8-fast",
+      "selectable": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "claude-opus-4.7",
+      "display_name": "claude-opus-4.7",
+      "selectable": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "claude-sonnet-4.6",
+      "display_name": "claude-sonnet-4.6",
+      "selectable": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "display_name": "gpt-5.6-sol",
+      "selectable": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "gpt-5.5",
+      "display_name": "gpt-5.5",
+      "selectable": false,
+      "restriction": "not_in_current_plan"
+    },
+    {
+      "id": "mai-code-1-flash-picker",
+      "display_name": "mai-code-1-flash-picker",
+      "selectable": false,
+      "restriction": "not_in_current_plan"
+    }
+  ]
+}

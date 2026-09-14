@@ -3,7 +3,7 @@
   "access_method": "perplexity_cli_api_key",
   "authentication_evidence": "operator_reported",
   "current_access_verified": false,
-  "generated_at": "2026-09-14T16:08:51Z",
+  "generated_at": "2026-09-14T16:31:39Z",
   "client": {
     "name": "pplx",
     "version": "2026.07.30.1785394496+1b7382b"

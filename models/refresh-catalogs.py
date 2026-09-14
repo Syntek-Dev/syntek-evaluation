@@ -25,16 +25,32 @@ def utc_timestamp(timestamp=None):
     return value.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def read_object(path, *, optional=False, toml=False):
+def strip_jsonc(raw):
+    """Remove comments and trailing commas while preserving quoted strings."""
+    string = r'"(?:\\.|[^"\\])*"'
+    without_comments = re.sub(
+        string + r"|//[^\r\n]*|/\*[\s\S]*?\*/",
+        lambda match: match.group() if match.group().startswith('"') else " ",
+        raw,
+    )
+    return re.sub(
+        string + r"|,(?=\s*[}\]])",
+        lambda match: match.group() if match.group().startswith('"') else "",
+        without_comments,
+    )
+
+
+def read_object(path, *, optional=False, toml=False, jsonc=False):
     try:
         raw = path.read_text(encoding="utf-8")
-        data = tomllib.loads(raw) if toml else json.loads(raw)
+        data = tomllib.loads(raw) if toml else json.loads(strip_jsonc(raw) if jsonc else raw)
     except FileNotFoundError:
         if optional:
             return {}, None
         raise CatalogError(f"missing source: {path}") from None
     except (ValueError, UnicodeError):
-        raise CatalogError(f"invalid {'TOML' if toml else 'JSON'}: {path}") from None
+        kind = "TOML" if toml else "JSONC" if jsonc else "JSON"
+        raise CatalogError(f"invalid {kind}: {path}") from None
     except OSError:
         raise CatalogError(f"cannot read source: {path}") from None
     if not isinstance(data, dict):
@@ -380,6 +396,231 @@ def perplexity_catalog(binary, receipt_path):
     }
 
 
+def copilot_version(binary):
+    """Query only the local version with isolated settings and no auto-update."""
+    environment = {
+        key: os.environ[key] for key in ("PATH", "LANG", "LC_ALL")
+        if key in os.environ
+    }
+    try:
+        with tempfile.TemporaryDirectory(prefix="copilot-metadata-") as directory:
+            environment.update({"COPILOT_HOME": directory, "CI": "1"})
+            with tempfile.TemporaryFile() as output:
+                result = subprocess.run(
+                    [str(binary), "--no-auto-update", "--version"],
+                    stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.DEVNULL,
+                    cwd=directory, env=environment, timeout=10,
+                )
+                output.seek(0)
+                captured = output.read(65537)
+        if result.returncode != 0 or len(captured) > 65536:
+            raise CatalogError("Copilot CLI version command failed or exceeded output limit")
+        lines = captured.decode("utf-8").splitlines()
+        version = re.fullmatch(
+            r"GitHub Copilot CLI ([0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?)\.?",
+            lines[0] if lines else "",
+        )
+        if version is None:
+            raise CatalogError("unrecognized Copilot CLI version output")
+        return version.group(1)
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        raise CatalogError("cannot read local Copilot CLI version") from None
+
+
+def copilot_model_observations(path):
+    """Validate a recorded picker snapshot without treating it as a live query."""
+    if path is None:
+        return {}, None
+    data, source = read_object(path, optional=True)
+    if source is None:
+        return data, source
+
+    def invalid(field):
+        raise CatalogError(f"invalid Copilot model observations {field}: {path}") from None
+
+    def nonempty_string(value):
+        return isinstance(value, str) and bool(value.strip())
+
+    if type(data.get("schema_version")) is not int or data["schema_version"] != 1:
+        invalid("schema_version")
+    if data.get("evidence") != "copilot_cli_model_picker":
+        invalid("evidence")
+    if data.get("model_id_source") != "copilot_model_command_validation":
+        invalid("model_id_source")
+    observed_at = data.get("observed_at")
+    if not isinstance(observed_at, str) or not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)",
+        observed_at,
+    ):
+        invalid("observed_at")
+    try:
+        datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError:
+        invalid("observed_at")
+    if not nonempty_string(data.get("client_version")):
+        invalid("client_version")
+    if type(data.get("list_complete")) is not bool:
+        invalid("list_complete")
+
+    selected = data.get("selected")
+    if not isinstance(selected, dict) or not nonempty_string(selected.get("model")):
+        invalid("selected.model")
+    if selected.get("reasoning_effort") is not None and not nonempty_string(
+        selected["reasoning_effort"]
+    ):
+        invalid("selected.reasoning_effort")
+    aliases = data.get("aliases")
+    if not isinstance(aliases, list) or any(not nonempty_string(item) for item in aliases):
+        invalid("aliases")
+    if len(set(aliases)) != len(aliases):
+        invalid("aliases")
+
+    entries = data.get("models")
+    if not isinstance(entries, list):
+        invalid("models")
+    model_ids = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            invalid("models entry")
+        model_id = entry.get("id")
+        if (
+            not nonempty_string(model_id) or model_id != model_id.strip()
+            or model_id in model_ids or model_id == "auto" or model_id in aliases
+        ):
+            invalid("model id")
+        model_ids.add(model_id)
+        if not nonempty_string(entry.get("display_name")):
+            invalid("display_name")
+        if type(entry.get("selectable")) is not bool:
+            invalid("selectable")
+        expected_restriction = None if entry["selectable"] else "not_in_current_plan"
+        if entry.get("restriction") != expected_restriction:
+            invalid("restriction")
+
+    source.update({
+        key: data[key] for key in (
+            "schema_version", "observed_at", "evidence", "model_id_source", "client_version"
+        )
+    })
+    return data, source
+
+
+def copilot_catalog(home, binary, observations_path=None):
+    """Inspect installation metadata and preferences without starting a session."""
+    settings_path = home / "settings.json"
+    settings, settings_source = read_object(settings_path, optional=True, jsonc=True)
+    model = optional_string(settings, "model", settings_path)
+    effort = optional_string(settings, "effortLevel", settings_path)
+    sources = [settings_source] if settings_source is not None else []
+    observations, observation_source = copilot_model_observations(observations_path)
+    if observation_source is not None:
+        sources.append(observation_source)
+
+    executable = binary if binary is not None else shutil.which("copilot")
+    version = None
+    if executable is not None:
+        executable = Path(executable).resolve()
+        if not executable.is_file():
+            raise CatalogError(f"missing Copilot CLI executable: {executable}")
+        sources.append({
+            "path": str(executable),
+            "modified_at": utc_timestamp(executable.stat().st_mtime),
+            "evidence": "local_executable_present",
+        })
+        for directory in executable.parents:
+            manifest_path = directory / "package.json"
+            if not manifest_path.is_file():
+                continue
+            package, package_source = read_object(manifest_path)
+            if package.get("name") != "@github/copilot":
+                continue
+            version = optional_string(package, "version", manifest_path)
+            if not version:
+                raise CatalogError(f"missing Copilot CLI package version: {manifest_path}")
+            sources.append(package_source)
+            break
+        if version is None:
+            version = copilot_version(executable)
+            sources[-1]["metadata_commands"] = [["--no-auto-update", "--version"]]
+
+    catalog = {
+        "provider": "github",
+        "access_method": "github_copilot_cli",
+        "authentication_evidence": "not_checked",
+        "subscription_plan": None,
+        "current_access_verified": False,
+        "generated_at": utc_timestamp(),
+        "client": {
+            "name": "GitHub Copilot CLI",
+            "installed": executable is not None,
+            "version": version,
+        },
+        "sources": sources,
+        "configured": {"model": model, "reasoning_effort": effort},
+        "model_list_scope": (
+            "Local Copilot CLI installation metadata and saved user-level model "
+            "preferences only. An empty list means no explicit model ID was observed. "
+            "Auto is a routing selector and is excluded from model IDs. Preferences "
+            "do not establish available models or account access; editor integrations, "
+            "session overrides, and repository settings are outside this inventory."
+        ),
+        "models": [
+            {
+                "id": model,
+                "availability": "configured_model_preference",
+                "current_access_verified": False,
+            }
+        ] if model and model != "auto" else [],
+    }
+    if observation_source is not None:
+        models = []
+        unavailable_models = []
+        observed_ids = set()
+        for entry in observations["models"]:
+            observed_ids.add(entry["id"])
+            observed_model = {
+                "id": entry["id"],
+                "display_name": entry["display_name"],
+                "availability": (
+                    "listed_in_copilot_model_picker" if entry["selectable"]
+                    else "blocked_by_copilot_plan"
+                ),
+                "observed_at": observations["observed_at"],
+                "current_access_verified": False,
+            }
+            if entry["selectable"]:
+                models.append(observed_model)
+            else:
+                observed_model["restriction"] = entry["restriction"]
+                unavailable_models.append(observed_model)
+        models.extend(
+            entry for entry in catalog["models"]
+            if entry["id"] not in observed_ids and entry["id"] not in observations["aliases"]
+        )
+        catalog.update({
+            "models": models,
+            "unavailable_models": unavailable_models,
+            "aliases": observations["aliases"],
+            "observed_selection": {
+                "model": observations["selected"]["model"],
+                "reasoning_effort": observations["selected"].get("reasoning_effort"),
+            },
+            "model_list_observed_at": observations["observed_at"],
+            "model_list_complete": observations["list_complete"],
+            "model_list_scope": (
+                "Recorded Copilot CLI model-picker observations at model_list_observed_at, "
+                "plus any saved user-level model preference. Plan-blocked observations "
+                "are listed separately under unavailable_models. Auto is a routing alias. "
+                "Refresh preserves the original observation time and does not query the "
+                "account model list. Picker entries and preferences do not establish "
+                "successful inference or current access; account, client, and policy "
+                "changes require a new observation. Editor integrations are outside "
+                "this inventory."
+            ),
+        })
+    return catalog
+
+
 def write_catalog(path, catalog):
     """Replace only complete outputs, preserving the previous file on failure."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -409,6 +650,17 @@ def main():
         "--perplexity-receipt", type=Path,
         default=Path.home() / ".config/pplx/pplx-receipt.json",
     )
+    parser.add_argument(
+        "--copilot-home", type=Path,
+        default=Path(os.environ.get("COPILOT_HOME") or Path.home() / ".copilot"),
+        help="Copilot CLI settings directory (default: COPILOT_HOME or ~/.copilot)",
+    )
+    parser.add_argument("--copilot-binary", type=Path, help="Path to the Copilot CLI executable")
+    parser.add_argument(
+        "--copilot-model-observations", type=Path,
+        default=Path(__file__).resolve().parent / "github-copilot/observed-models.json",
+        help="Recorded Copilot CLI model-picker snapshot (optional if absent)",
+    )
     args = parser.parse_args()
     destination = Path(__file__).resolve().parent
     failed = False
@@ -417,6 +669,9 @@ def main():
         ("anthropic", anthropic_catalog, (args.claude_home, args.claude_state)),
         ("gemini", gemini_catalog, (args.gemini_home, args.gemini_package)),
         ("perplexity", perplexity_catalog, (args.perplexity_binary, args.perplexity_receipt)),
+        ("github-copilot", copilot_catalog, (
+            args.copilot_home, args.copilot_binary, args.copilot_model_observations
+        )),
     ):
         output = destination / provider / "models.json"
         try:

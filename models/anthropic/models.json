@@ -1,7 +1,7 @@
 {
   "provider": "anthropic",
   "access_method": "claude_code_subscription",
-  "generated_at": "2026-09-14T16:08:50Z",
+  "generated_at": "2026-09-14T16:31:38Z",
   "sources": [
     {
       "path": "/home/sam-dev/.claude/stats-cache.json",

@@ -45,6 +45,7 @@ With the environment activated:
 
 ```sh
 python -m unittest discover -s experiments -p 'test_*.py'
+python -m unittest discover -s models -p 'test_*.py'
 bash -n experiments/run-benchmark.sh
 ```
 
