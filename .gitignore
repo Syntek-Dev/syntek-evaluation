@@ -11,7 +11,6 @@ htmlcov/
 # Local data, model weights, and agent configuration
 /cache/
 /datasets/
-/models/ollama
 /.agents/
 /.codex/
 

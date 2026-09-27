@@ -56,12 +56,26 @@ with a letter; quote strings that resemble numbers or booleans. Nested mappings,
 lists, multiline scalars, aliases, tags
 and inline comments are unsupported and rejected; no YAML package is required.
 
-The runner reads metadata separately and sends only the body to Ollama. It
-records `fixture_metadata`, `fixture_sha256` (the complete Markdown file) and
-`input_sha256` (the exact text sent). Final LF characters are removed from the
-body to preserve the previous runner's shell convention; other whitespace and
-internal Markdown horizontal rules are retained. Invalid frontmatter fails
-before runtime calls or result creation.
+The runner reads metadata separately and sends only the body to llama.cpp's
+`llama-server`, as a single user message to its OpenAI-compatible
+`/v1/chat/completions` endpoint, so the server applies the model's own chat
+template. It records `fixture_metadata`, `fixture_sha256` (the complete
+Markdown file) and `input_sha256` (the exact text sent). Final LF characters are
+removed from the body to preserve the previous runner's shell convention; other
+whitespace and internal Markdown horizontal rules are retained. Invalid
+frontmatter fails before runtime calls or result creation.
+
+Each run appends one JSON object per line to `results/benchmarks.jsonl` and
+saves the raw server response as `results/outputs/<run id>.json`. Token counts
+come from the response's standard `usage` object. Durations and tokens per
+second come from llama-server's own `timings`; a server that returns no
+`timings` (for example vLLM) leaves those fields `null` rather than estimating
+them, and `wall_duration_seconds` is always measured. `prompt_cached_tokens`
+records prompt tokens the server reused from its cache, which make a repeat run
+of the same prompt faster than a cold one. The `llama_server` block records the
+server URL, the loaded model file, the served model name, the context size and
+the slot count. Quantisation, sampling settings and launch flags are not yet
+recorded, so note them alongside a run until they are.
 
 To inspect the parsed input without running a model:
 
@@ -162,4 +176,4 @@ bash -n experiments/run-benchmark.sh
 Checks run entirely in temporary directories and cover inventory, metadata,
 standalone execution, migration, exact body preservation, dry-run behaviour,
 repeatability, hashes, unknown paths and symlink rejection. Runner integration
-checks mock Ollama, network requests and hardware telemetry; no model runs occur.
+checks mock llama-server, network requests and hardware telemetry; no model runs occur.

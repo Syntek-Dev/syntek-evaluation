@@ -1,4 +1,4 @@
-"""Exercise the Markdown runner with a real fixture reader and mocked runtime.
+"""Exercise the Markdown runner with a real fixture reader and a mocked llama-server.
 
 Run: python3 -m unittest discover -s experiments -p 'test_run_benchmark.py'
 No model calls, network access or GPU hardware are required.
@@ -37,36 +37,60 @@ class RunBenchmarkTests(unittest.TestCase):
             'PATH': str(self.bin) + os.pathsep + os.environ['PATH'],
             'BENCHMARK_TEST_RUNTIME_LOG': str(self.runtime_log),
             'BENCHMARK_TEST_REQUEST': str(self.request),
+            'BENCHMARK_TEST_SERVER_MODE': 'ok',
         }
+        self.environment.pop('LLAMA_SERVER_URL', None)
+        self.environment.pop('BENCHMARK_MACHINE_ID', None)
+        # A mock llama-server: /health, /props and /v1/chat/completions.
         self.mock_command('curl', '''#!/usr/bin/env python3
 import json
 import os
 from pathlib import Path
 import sys
+from urllib.parse import urlsplit
 
-with open(os.environ['BENCHMARK_TEST_RUNTIME_LOG'], 'a') as log:
-    log.write('curl\\n')
 arguments = sys.argv[1:]
-if 'http://127.0.0.1:11434/api/version' in arguments:
-    print(json.dumps({'version': 'test-runtime'}))
-elif 'http://127.0.0.1:11434/api/generate' in arguments:
+urls = [argument for argument in arguments if argument.startswith('http')]
+if len(urls) != 1:
+    sys.exit('Unexpected curl invocation: ' + repr(arguments))
+url = urlsplit(urls[0])
+with open(os.environ['BENCHMARK_TEST_RUNTIME_LOG'], 'a') as log:
+    log.write('curl ' + urls[0] + '\\n')
+mode = os.environ['BENCHMARK_TEST_SERVER_MODE']
+if url.path == '/health':
+    if mode == 'loading':
+        print('curl: (22) The requested URL returned error: 503', file=sys.stderr)
+        sys.exit(22)
+    print(json.dumps({'status': 'ok'}))
+elif url.path == '/props':
+    print(json.dumps({
+        'build_info': 'b9999-abc1234',
+        'model_path': '/models/test-model-Q4_K_M.gguf',
+        'total_slots': 1,
+        'default_generation_settings': {'n_ctx': 8192},
+    }))
+elif url.path == '/v1/chat/completions':
     payload = arguments[arguments.index('-d') + 1]
     json.loads(payload)
     Path(os.environ['BENCHMARK_TEST_REQUEST']).write_text(payload)
-    print(json.dumps({
-        'response': 'Mock answer', 'done': True,
-        'prompt_eval_count': 11, 'eval_count': 7,
-        'prompt_eval_duration': 100000000, 'eval_duration': 200000000,
-        'total_duration': 400000000, 'load_duration': 100000000,
-    }))
+    response = {
+        'object': 'chat.completion',
+        'model': 'test:model',
+        'choices': [{
+            'index': 0, 'finish_reason': 'stop',
+            'message': {'role': 'assistant', 'content': 'Mock answer'},
+        }],
+        'usage': {'prompt_tokens': 11, 'completion_tokens': 7, 'total_tokens': 18},
+    }
+    if mode != 'no-timings':
+        response['timings'] = {
+            'cache_n': 0,
+            'prompt_n': 11, 'prompt_ms': 100.0, 'prompt_per_second': 110.0,
+            'predicted_n': 7, 'predicted_ms': 200.0, 'predicted_per_second': 35.0,
+        }
+    print(json.dumps(response))
 else:
     sys.exit('Unexpected curl invocation: ' + repr(arguments))
-''')
-        self.mock_command('ollama', '''#!/usr/bin/env bash
-printf 'ollama\\n' >> "$BENCHMARK_TEST_RUNTIME_LOG"
-[[ "$1" == ps ]] || exit 1
-printf 'NAME ID SIZE PROCESSOR CONTEXT UNTIL\\n'
-printf 'test:model abc 1 GB 100%% GPU 8192 5 minutes from now\\n'
 ''')
         self.mock_command('nvidia-smi', '''#!/usr/bin/env bash
 printf 'nvidia-smi\\n' >> "$BENCHMARK_TEST_RUNTIME_LOG"
@@ -93,6 +117,11 @@ printf 'Model name: Mock CPU\\nCore(s) per socket: 4\\nCPU(s): 8\\n'
             cwd=self.root, env=self.environment, capture_output=True, text=True,
             timeout=20,
         )
+
+    def records(self):
+        # Every line of the results log must be one complete JSON object.
+        lines = (self.experiments / 'results/benchmarks.jsonl').read_text().splitlines()
+        return [json.loads(line) for line in lines]
 
     def write_fixture(self, body, version=2):
         metadata = {
@@ -133,23 +162,79 @@ printf 'Model name: Mock CPU\\nCore(s) per socket: 4\\nCPU(s): 8\\n'
                 request = json.loads(self.request.read_text())
                 expected_input = body.rstrip(b'\n')
                 self.assertEqual(request, {
-                    'model': 'test:model', 'prompt': expected_input.decode(),
-                    'stream': False, 'keep_alive': '5m',
+                    'model': 'test:model',
+                    'messages': [{'role': 'user', 'content': expected_input.decode()}],
+                    'stream': False,
                 })
-                # The runner's existing log is a sequence of JSON objects.
-                records = subprocess.run(
-                    ['jq', '-s', '.', str(self.experiments / 'results/benchmarks.jsonl')],
-                    capture_output=True, text=True, check=True, timeout=5,
-                )
-                record = json.loads(records.stdout)[-1]
+                records = self.records()
+                self.assertEqual(len(records), index)
+                record = records[-1]
                 self.assertEqual(record['id'], f'AI01-{index:04d}')
                 self.assertEqual(record['prompt'], 'coding/python-production-code-review')
                 self.assertEqual(record['fixture_metadata'], metadata)
                 self.assertEqual(record['input_sha256'], hashlib.sha256(expected_input).hexdigest())
                 self.assertEqual(record['fixture_sha256'], hashlib.sha256(content).hexdigest())
-                self.assertEqual(record['runtime_version'], 'test-runtime')
+                self.assertEqual(record['runtime'], 'llama.cpp')
+                self.assertEqual(record['runtime_version'], 'b9999-abc1234')
                 self.assertEqual(record['prompt_tokens'], 11)
+                self.assertEqual(record['prompt_processed_tokens'], 11)
+                self.assertEqual(record['prompt_cached_tokens'], 0)
                 self.assertEqual(record['output_tokens'], 7)
+                self.assertEqual(record['prompt_duration_ns'], 100000000)
+                self.assertEqual(record['output_duration_ns'], 200000000)
+                self.assertEqual(record['total_duration_ns'], 300000000)
+                self.assertEqual(record['prompt_tokens_per_second'], 110.0)
+                self.assertEqual(record['generation_tokens_per_second'], 35.0)
+                self.assertEqual(record['total_duration_seconds'], 0.3)
+                self.assertEqual(record['llama_server'], {
+                    'url': 'http://127.0.0.1:8080',
+                    'model_path': '/models/test-model-Q4_K_M.gguf',
+                    'served_model': 'test:model',
+                    'context_tokens': 8192,
+                    'slots': 1,
+                })
+                raw = json.loads((self.experiments / f'results/outputs/AI01-{index:04d}.json').read_text())
+                self.assertEqual(raw['choices'][0]['message']['content'], 'Mock answer')
+
+    def test_response_without_llama_timings_records_nulls_not_guesses(self):
+        # Other OpenAI-compatible servers (vLLM) return usage but no timings.
+        self.environment['BENCHMARK_TEST_SERVER_MODE'] = 'no-timings'
+        self.write_fixture(b'# Task\nTest\n')
+        result = self.run_benchmark('coding/python-production-code-review')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        record = self.records()[-1]
+        self.assertEqual(record['prompt_tokens'], 11)
+        self.assertEqual(record['output_tokens'], 7)
+        for field in (
+            'prompt_processed_tokens', 'prompt_cached_tokens', 'prompt_duration_ns',
+            'output_duration_ns', 'total_duration_ns', 'prompt_tokens_per_second',
+            'generation_tokens_per_second', 'total_duration_seconds',
+        ):
+            self.assertIsNone(record[field], field)
+        self.assertIsInstance(record['wall_duration_seconds'], float)
+
+    def test_server_url_and_machine_can_be_overridden(self):
+        self.environment['LLAMA_SERVER_URL'] = 'http://127.0.0.1:9999/'
+        self.environment['BENCHMARK_MACHINE_ID'] = 'AI02'
+        self.write_fixture(b'# Task\nTest\n')
+        result = self.run_benchmark('coding/python-production-code-review')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        record = self.records()[-1]
+        self.assertEqual(record['id'], 'AI02-0001')
+        self.assertEqual(record['machine'], 'AI02')
+        self.assertEqual(record['llama_server']['url'], 'http://127.0.0.1:9999')
+        called = [line for line in self.runtime_log.read_text().splitlines() if line.startswith('curl ')]
+        self.assertTrue(called)
+        self.assertTrue(all(line.startswith('curl http://127.0.0.1:9999/') for line in called), called)
+
+    def test_server_not_ready_fails_before_results(self):
+        self.environment['BENCHMARK_TEST_SERVER_MODE'] = 'loading'
+        self.write_fixture(b'# Task\nTest\n')
+        result = self.run_benchmark('coding/python-production-code-review')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('ERROR: llama-server is not ready', result.stdout + result.stderr)
+        self.assertFalse(self.request.exists())
+        self.assertFalse((self.experiments / 'results').exists())
 
     def test_malformed_frontmatter_fails_before_runtime_or_results(self):
         self.write_fixture(b'# Task\nTest\n')

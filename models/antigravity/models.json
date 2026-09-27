@@ -1,0 +1,34 @@
+{
+  "provider": "google",
+  "access_method": "antigravity_cli",
+  "authentication_evidence": "not_checked",
+  "current_access_verified": false,
+  "generated_at": "2026-09-27T21:54:52Z",
+  "client": {
+    "name": "Antigravity CLI",
+    "installed": true,
+    "version": "1.2.12"
+  },
+  "sources": [
+    {
+      "path": "/home/sam-dev/.gemini/antigravity-cli/settings.json",
+      "modified_at": "2026-09-27T21:54:10Z"
+    },
+    {
+      "path": "/home/sam-dev/.local/bin/agy",
+      "modified_at": "2026-09-27T21:30:03Z",
+      "evidence": "local_executable_present",
+      "metadata_commands": [
+        [
+          "--version"
+        ]
+      ]
+    }
+  ],
+  "configured": {
+    "model": null,
+    "reasoning_effort": null
+  },
+  "model_list_scope": "No model list recorded. Antigravity CLI keeps no local model list: agy fetches the signed-in account's models from Google at run time, and this refresh does not run agy models. An empty list means nothing was recorded, not that no models are available. configured.model is the picker label saved in antigravity-cli/settings.json, written only after the default is changed; project settings and the --model and --effort flags can override it. Authentication and model access have not been verified.",
+  "models": []
+}

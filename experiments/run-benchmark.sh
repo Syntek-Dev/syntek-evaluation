@@ -4,8 +4,8 @@ set -euo pipefail
 
 # ============================================================
 # Syntek Model Lab — Benchmark Runner
-# Machine: AI-01
-# Runtime: Ollama
+# Machine: AI-01 (override with BENCHMARK_MACHINE_ID)
+# Runtime: llama.cpp (llama-server, OpenAI-compatible API)
 # ============================================================
 
 BASE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,10 +14,11 @@ RESULT_DIR="$BASE_DIR/results"
 OUTPUT_DIR="$RESULT_DIR/outputs"
 RESULTS_FILE="$RESULT_DIR/benchmarks.jsonl"
 
-OLLAMA_URL="http://127.0.0.1:11434"
+LLAMA_SERVER_URL="${LLAMA_SERVER_URL:-http://127.0.0.1:8080}"
+LLAMA_SERVER_URL="${LLAMA_SERVER_URL%/}"
 
-MACHINE_ID="AI01"
-RUNTIME="ollama"
+MACHINE_ID="${BENCHMARK_MACHINE_ID:-AI01}"
+RUNTIME="llama.cpp"
 
 # ------------------------------------------------------------
 # Usage
@@ -28,10 +29,14 @@ usage() {
     echo "  $0 <model> <domain/prompt-name>"
     echo
     echo "Example:"
-    echo "  $0 qwen3.6:35b-a3b coding/python-production-code-review"
+    echo "  $0 qwen3-coder-30b-a3b coding/python-production-code-review"
     echo
     echo "Prompt file:"
     echo "  $PROMPT_DIR/<domain/prompt-name>.md"
+    echo
+    echo "Environment:"
+    echo "  LLAMA_SERVER_URL      llama-server base URL (default: http://127.0.0.1:8080)"
+    echo "  BENCHMARK_MACHINE_ID  machine recorded in run IDs (default: AI01)"
     exit 1
 }
 
@@ -63,18 +68,16 @@ if ! command -v jq >/dev/null 2>&1; then
     exit 1
 fi
 
-# Parse and validate before contacting Ollama or capturing system telemetry.
+# Parse and validate before contacting llama-server or capturing system telemetry.
 # Keep the body in JSON so shell decoding cannot change the model input.
 FIXTURE_JSON=$(python3 "$BASE_DIR/populate-benchmarks.py" --read-prompt "$PROMPT_FILE")
 
-if ! command -v ollama >/dev/null 2>&1; then
-    echo "ERROR: ollama command not found."
-    exit 1
-fi
-
-if ! curl -fsS "$OLLAMA_URL/api/version" >/dev/null 2>&1; then
-    echo "ERROR: Ollama is not reachable at:"
-    echo "  $OLLAMA_URL"
+# /health returns 200 {"status":"ok"} once the model is loaded, 503 while loading.
+if ! HEALTH_JSON=$(curl -fsS "$LLAMA_SERVER_URL/health" 2>/dev/null) ||
+    [[ "$(echo "$HEALTH_JSON" | jq -r '.status // empty' 2>/dev/null)" != "ok" ]]; then
+    echo "ERROR: llama-server is not ready at:"
+    echo "  $LLAMA_SERVER_URL"
+    echo "Start it with a model loaded, e.g. llama-server -m <model.gguf> --port 8080"
     exit 1
 fi
 
@@ -84,8 +87,7 @@ mkdir -p "$OUTPUT_DIR"
 # Generate experiment ID
 # ------------------------------------------------------------
 
-# Find the highest existing automated run number.
-# LEGACY-* records are deliberately ignored.
+# Find the highest existing automated run number for this machine.
 if [[ ! -f "$RESULTS_FILE" ]]; then
     RUN_NUMBER=1
 else
@@ -122,6 +124,7 @@ echo "=============================================="
 echo "Run:       $RUN_ID"
 echo "Machine:   $MACHINE_ID"
 echo "Runtime:   $RUNTIME"
+echo "Server:    $LLAMA_SERVER_URL"
 echo "Model:     $MODEL"
 echo "Prompt:    $PROMPT_NAME"
 echo "=============================================="
@@ -131,7 +134,12 @@ echo
 # Runtime information
 # ------------------------------------------------------------
 
-OLLAMA_VERSION=$(curl -fsS "$OLLAMA_URL/api/version" | jq -r '.version')
+PROPS_JSON=$(curl -fsS "$LLAMA_SERVER_URL/props")
+
+RUNTIME_VERSION=$(echo "$PROPS_JSON" | jq -r '.build_info // "unknown"')
+SERVER_MODEL_PATH=$(echo "$PROPS_JSON" | jq -r '.model_path // ""')
+SERVER_CONTEXT=$(echo "$PROPS_JSON" | jq '.default_generation_settings.n_ctx // null')
+SERVER_SLOTS=$(echo "$PROPS_JSON" | jq '.total_slots // null')
 
 # ------------------------------------------------------------
 # System telemetry
@@ -190,64 +198,28 @@ echo
 
 START_TIME_NS=$(date +%s%N)
 
-RESPONSE_JSON=$(
-    curl -fsS "$OLLAMA_URL/api/generate" \
+# One user message, so llama-server applies the model's own chat template.
+if ! RESPONSE_JSON=$(
+    curl -fsS "$LLAMA_SERVER_URL/v1/chat/completions" \
         -H 'Content-Type: application/json' \
         -d "$(jq -n \
             --arg model "$MODEL" \
             --argjson fixture "$FIXTURE_JSON" \
             '{
                 model: $model,
-                prompt: $fixture.prompt,
-                stream: false,
-                keep_alive: "5m"
+                messages: [
+                    {role: "user", content: $fixture.prompt}
+                ],
+                stream: false
             }')"
-)
+); then
+    echo "ERROR: llama-server request failed."
+    exit 1
+fi
 
 END_TIME_NS=$(date +%s%N)
 
 WALL_TIME_NS=$((END_TIME_NS - START_TIME_NS))
-
-# ------------------------------------------------------------
-# Ollama runtime telemetry
-# ------------------------------------------------------------
-
-OLLAMA_PS=$(ollama ps)
-
-OLLAMA_PROCESSOR=""
-OLLAMA_CONTEXT=""
-
-OLLAMA_MODEL_ROW=$(
-    echo "$OLLAMA_PS" |
-    awk -v model="$MODEL" '
-        NR > 1 && $1 == model {
-            print
-            exit
-        }
-    '
-)
-
-if [[ -n "$OLLAMA_MODEL_ROW" ]]; then
-    # Ollama 0.34.0 `ollama ps` currently renders:
-    #
-    # NAME  ID  SIZE  PROCESSOR  CONTEXT  UNTIL
-    #
-    # SIZE is two fields ("22 GB")
-    # PROCESSOR is two fields ("65%/35% CPU/GPU")
-    # UNTIL is variable-length text.
-    #
-    # Therefore the useful fields are:
-    #   $5 + $6 = processor
-    #   $7      = context
-    OLLAMA_PROCESSOR=$(echo "$OLLAMA_MODEL_ROW" | awk '{print $5 " " $6}')
-    OLLAMA_CONTEXT=$(echo "$OLLAMA_MODEL_ROW" | awk '{print $7}')
-fi
-
-echo
-echo "Ollama runtime:"
-echo "  Processor: $OLLAMA_PROCESSOR"
-echo "  Context:   $OLLAMA_CONTEXT"
-echo
 
 # ------------------------------------------------------------
 # CPU telemetry
@@ -292,12 +264,17 @@ capture_system_telemetry "AFTER"
 # ------------------------------------------------------------
 
 if [[ -z "$RESPONSE_JSON" ]]; then
-    echo "ERROR: Ollama returned an empty response."
+    echo "ERROR: llama-server returned an empty response."
     exit 1
 fi
 
 if ! echo "$RESPONSE_JSON" | jq empty >/dev/null 2>&1; then
-    echo "ERROR: Ollama returned invalid JSON."
+    echo "ERROR: llama-server returned invalid JSON."
+    exit 1
+fi
+
+if ! echo "$RESPONSE_JSON" | jq -e '.choices[0].message.content | type == "string"' >/dev/null 2>&1; then
+    echo "ERROR: llama-server response has no message content."
     exit 1
 fi
 
@@ -305,34 +282,38 @@ fi
 # Extract benchmark metrics
 # ------------------------------------------------------------
 
-PROMPT_TOKENS=$(echo "$RESPONSE_JSON" | jq -r '.prompt_eval_count // 0')
-OUTPUT_TOKENS=$(echo "$RESPONSE_JSON" | jq -r '.eval_count // 0')
+# usage is the OpenAI-standard token count; timings is llama-server's own
+# measurement (absent from other OpenAI-compatible servers, so null there).
+# prompt_tokens counts the whole prompt; timings.prompt_n counts only the
+# tokens processed this run, and timings.cache_n those reused from the cache.
+PROMPT_TOKENS=$(echo "$RESPONSE_JSON" | jq '.usage.prompt_tokens // .timings.prompt_n // 0')
+OUTPUT_TOKENS=$(echo "$RESPONSE_JSON" | jq '.usage.completion_tokens // .timings.predicted_n // 0')
+PROMPT_PROCESSED_TOKENS=$(echo "$RESPONSE_JSON" | jq '.timings.prompt_n // null')
+PROMPT_CACHED_TOKENS=$(echo "$RESPONSE_JSON" | jq '.timings.cache_n // null')
 
-PROMPT_DURATION_NS=$(echo "$RESPONSE_JSON" | jq -r '.prompt_eval_duration // 0')
-OUTPUT_DURATION_NS=$(echo "$RESPONSE_JSON" | jq -r '.eval_duration // 0')
-TOTAL_DURATION_NS=$(echo "$RESPONSE_JSON" | jq -r '.total_duration // 0')
-LOAD_DURATION_NS=$(echo "$RESPONSE_JSON" | jq -r '.load_duration // 0')
-
-PROMPT_TPS=$(echo "$RESPONSE_JSON" | jq -r '
-    if (.prompt_eval_duration // 0) > 0
-    then (.prompt_eval_count / (.prompt_eval_duration / 1000000000))
-    else null
+PROMPT_DURATION_NS=$(echo "$RESPONSE_JSON" | jq '
+    if .timings.prompt_ms == null then null else (.timings.prompt_ms * 1000000 | round) end
+')
+OUTPUT_DURATION_NS=$(echo "$RESPONSE_JSON" | jq '
+    if .timings.predicted_ms == null then null else (.timings.predicted_ms * 1000000 | round) end
+')
+TOTAL_DURATION_NS=$(echo "$RESPONSE_JSON" | jq '
+    if .timings.prompt_ms == null or .timings.predicted_ms == null then null
+    else ((.timings.prompt_ms + .timings.predicted_ms) * 1000000 | round)
     end
 ')
 
-OUTPUT_TPS=$(echo "$RESPONSE_JSON" | jq -r '
-    if (.eval_duration // 0) > 0
-    then (.eval_count / (.eval_duration / 1000000000))
-    else null
-    end
-')
+PROMPT_TPS=$(echo "$RESPONSE_JSON" | jq '.timings.prompt_per_second // null')
+OUTPUT_TPS=$(echo "$RESPONSE_JSON" | jq '.timings.predicted_per_second // null')
 
-TOTAL_SECONDS=$(echo "$TOTAL_DURATION_NS" | awk '{printf "%.3f", $1 / 1000000000}')
+SERVED_MODEL=$(echo "$RESPONSE_JSON" | jq -r '.model // ""')
+
+TOTAL_SECONDS=$(echo "$TOTAL_DURATION_NS" | awk '$1 == "null" {print "null"; next} {printf "%.3f", $1 / 1000000000}')
 
 WALL_SECONDS=$(echo "$WALL_TIME_NS" | awk '{printf "%.3f", $1 / 1000000000}')
 
 # ------------------------------------------------------------
-# Save raw Ollama response
+# Save raw llama-server response
 # ------------------------------------------------------------
 
 RAW_OUTPUT_FILE="$OUTPUT_DIR/$RUN_ID.json"
@@ -347,11 +328,12 @@ TIMESTAMP=$(date --iso-8601=seconds)
 
 echo "DEBUG:"
 echo "  PROMPT_TOKENS=$PROMPT_TOKENS"
+echo "  PROMPT_PROCESSED_TOKENS=$PROMPT_PROCESSED_TOKENS"
+echo "  PROMPT_CACHED_TOKENS=$PROMPT_CACHED_TOKENS"
 echo "  OUTPUT_TOKENS=$OUTPUT_TOKENS"
 echo "  PROMPT_DURATION_NS=$PROMPT_DURATION_NS"
 echo "  OUTPUT_DURATION_NS=$OUTPUT_DURATION_NS"
 echo "  TOTAL_DURATION_NS=$TOTAL_DURATION_NS"
-echo "  LOAD_DURATION_NS=$LOAD_DURATION_NS"
 echo "  PROMPT_TPS=$PROMPT_TPS"
 echo "  OUTPUT_TPS=$OUTPUT_TPS"
 echo "  CPU_CORES=$CPU_CORES"
@@ -379,26 +361,30 @@ BENCHMARK_RECORD=$(jq -n \
     --arg timestamp "$TIMESTAMP" \
     --arg machine "$MACHINE_ID" \
     --arg runtime "$RUNTIME" \
-    --arg runtime_version "$OLLAMA_VERSION" \
+    --arg runtime_version "$RUNTIME_VERSION" \
     --arg model "$MODEL" \
     --arg prompt "$PROMPT_NAME" \
     --argjson fixture "$FIXTURE_JSON" \
     --arg status "valid" \
     --argjson prompt_tokens "$PROMPT_TOKENS" \
+    --argjson prompt_processed_tokens "$PROMPT_PROCESSED_TOKENS" \
+    --argjson prompt_cached_tokens "$PROMPT_CACHED_TOKENS" \
     --argjson output_tokens "$OUTPUT_TOKENS" \
     --argjson prompt_duration_ns "$PROMPT_DURATION_NS" \
     --argjson output_duration_ns "$OUTPUT_DURATION_NS" \
     --argjson total_duration_ns "$TOTAL_DURATION_NS" \
-    --argjson load_duration_ns "$LOAD_DURATION_NS" \
     --argjson prompt_tps "$PROMPT_TPS" \
     --argjson output_tps "$OUTPUT_TPS" \
-    --arg total_seconds "$TOTAL_SECONDS" \
+    --argjson total_seconds "$TOTAL_SECONDS" \
     --arg wall_seconds "$WALL_SECONDS" \
     --arg cpu_model "$CPU_MODEL" \
     --argjson cpu_cores "$CPU_CORES" \
     --argjson cpu_threads "$CPU_THREADS" \
-    --arg ollama_processor "$OLLAMA_PROCESSOR" \
-    --arg ollama_context "$OLLAMA_CONTEXT" \
+    --arg server_url "$LLAMA_SERVER_URL" \
+    --arg server_model_path "$SERVER_MODEL_PATH" \
+    --arg served_model "$SERVED_MODEL" \
+    --argjson server_context "$SERVER_CONTEXT" \
+    --argjson server_slots "$SERVER_SLOTS" \
     --argjson before_ram_total_bytes "$BEFORE_RAM_TOTAL_BYTES" \
     --argjson before_ram_used_bytes "$BEFORE_RAM_USED_BYTES" \
     --argjson before_ram_available_bytes "$BEFORE_RAM_AVAILABLE_BYTES" \
@@ -430,23 +416,27 @@ BENCHMARK_RECORD=$(jq -n \
         fixture_sha256: $fixture.fixture_sha256,
         status: $status,
         prompt_tokens: $prompt_tokens,
+        prompt_processed_tokens: $prompt_processed_tokens,
+        prompt_cached_tokens: $prompt_cached_tokens,
         output_tokens: $output_tokens,
         prompt_duration_ns: $prompt_duration_ns,
         output_duration_ns: $output_duration_ns,
         total_duration_ns: $total_duration_ns,
-        load_duration_ns: $load_duration_ns,
         prompt_tokens_per_second: $prompt_tps,
         generation_tokens_per_second: $output_tps,
-        total_duration_seconds: ($total_seconds | tonumber),
+        total_duration_seconds: $total_seconds,
         wall_duration_seconds: ($wall_seconds | tonumber),
         cpu: {
             model: $cpu_model,
             cores: $cpu_cores,
             threads: $cpu_threads
         },
-        ollama_runtime: {
-            processor: $ollama_processor,
-            context: $ollama_context
+        llama_server: {
+            url: $server_url,
+            model_path: $server_model_path,
+            served_model: $served_model,
+            context_tokens: $server_context,
+            slots: $server_slots
         },
         system_before: {
             ram: {
@@ -481,7 +471,8 @@ BENCHMARK_RECORD=$(jq -n \
     }'
 )
 
-echo "$BENCHMARK_RECORD" >> "$RESULTS_FILE"
+# One compact object per line, so the log is real JSON Lines.
+echo "$BENCHMARK_RECORD" | jq -c '.' >> "$RESULTS_FILE"
 
 # ------------------------------------------------------------
 # Display result
@@ -495,7 +486,7 @@ echo
 echo "Run ID:              $RUN_ID"
 echo "Model:               $MODEL"
 echo "Prompt:              $PROMPT_NAME"
-echo "Prompt tokens:       $PROMPT_TOKENS"
+echo "Prompt tokens:       $PROMPT_TOKENS (cached: $PROMPT_CACHED_TOKENS)"
 echo "Output tokens:       $OUTPUT_TOKENS"
 echo "Prompt tok/s:        $PROMPT_TPS"
 echo "Generation tok/s:    $OUTPUT_TPS"

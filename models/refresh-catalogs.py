@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import pwd
 import re
 import shutil
 import subprocess
@@ -25,31 +26,16 @@ def utc_timestamp(timestamp=None):
     return value.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def strip_jsonc(raw):
-    """Remove comments and trailing commas while preserving quoted strings."""
-    string = r'"(?:\\.|[^"\\])*"'
-    without_comments = re.sub(
-        string + r"|//[^\r\n]*|/\*[\s\S]*?\*/",
-        lambda match: match.group() if match.group().startswith('"') else " ",
-        raw,
-    )
-    return re.sub(
-        string + r"|,(?=\s*[}\]])",
-        lambda match: match.group() if match.group().startswith('"') else "",
-        without_comments,
-    )
-
-
-def read_object(path, *, optional=False, toml=False, jsonc=False):
+def read_object(path, *, optional=False, toml=False):
     try:
         raw = path.read_text(encoding="utf-8")
-        data = tomllib.loads(raw) if toml else json.loads(strip_jsonc(raw) if jsonc else raw)
+        data = tomllib.loads(raw) if toml else json.loads(raw)
     except FileNotFoundError:
         if optional:
             return {}, None
         raise CatalogError(f"missing source: {path}") from None
-    except (ValueError, UnicodeError):
-        kind = "TOML" if toml else "JSONC" if jsonc else "JSON"
+    except (ValueError, UnicodeError, RecursionError):
+        kind = "TOML" if toml else "JSON"
         raise CatalogError(f"invalid {kind}: {path}") from None
     except OSError:
         raise CatalogError(f"cannot read source: {path}") from None
@@ -194,121 +180,6 @@ def anthropic_catalog(home, state_path):
     }
 
 
-def find_gemini_package():
-    executable = shutil.which("gemini")
-    if executable is None:
-        raise CatalogError("Gemini CLI is not installed or not on PATH")
-    for directory in Path(executable).resolve().parents:
-        manifest = directory / "package.json"
-        if manifest.is_file():
-            package, _ = read_object(manifest)
-            if package.get("name") == "@google/gemini-cli":
-                return directory
-    raise CatalogError("cannot locate the Gemini CLI package from its executable")
-
-
-def bundled_gemini_models(package_path):
-    """Read only literal constants and the declared set; never execute JavaScript."""
-    for bundle_path in sorted((package_path / "bundle").glob("*.js")):
-        try:
-            raw = bundle_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            raise CatalogError(f"cannot read Gemini CLI bundle: {bundle_path}") from None
-        section = re.search(
-            r"^// packages/core/dist/src/config/models\.js\r?\n(.*?)"
-            r"(?=^// [^\n]+\.js\r?$|\Z)", raw, re.MULTILINE | re.DOTALL
-        )
-        if section is None:
-            continue
-        body = section.group(1)
-        constants = {
-            name: value for name, _, value in re.findall(
-                r"^(?:var|const|let)\s+([A-Z][A-Z0-9_]*)\s*=\s*"
-                r"(['\"])([A-Za-z0-9._-]+)\2\s*;", body, re.MULTILINE
-            )
-        }
-        model_set = re.search(
-            r"\b(?:var|const|let)\s+VALID_GEMINI_MODELS\s*=\s*"
-            r"(?:/\*\s*@__PURE__\s*\*/\s*)?new\s+Set\s*\(\s*\[(.*?)\]\s*\)\s*;",
-            body, re.DOTALL
-        )
-        if model_set is None:
-            continue
-        references = [item.strip() for item in model_set.group(1).split(",")]
-        if references and not references[-1]:
-            references.pop()
-        if not references or any(
-            not re.fullmatch(r"[A-Z][A-Z0-9_]*", name) or name not in constants
-            for name in references
-        ):
-            continue
-        model_ids = sorted({
-            constants[name] for name in references if constants[name].startswith("gemini-")
-        })
-        if not model_ids:
-            continue
-        aliases = sorted({
-            value for name, value in constants.items()
-            if name.startswith("GEMINI_MODEL_ALIAS_")
-            or name in ("PREVIEW_GEMINI_MODEL_AUTO", "DEFAULT_GEMINI_MODEL_AUTO")
-        })
-        return model_ids, aliases, {
-            "path": str(bundle_path),
-            "modified_at": utc_timestamp(bundle_path.stat().st_mtime),
-        }
-    raise CatalogError(f"missing or unsupported VALID_GEMINI_MODELS declaration: {package_path}")
-
-
-def gemini_catalog(home, package_path):
-    settings_path = home / "settings.json"
-    settings, settings_source = read_object(settings_path)
-    model_settings = settings.get("model", {})
-    security = settings.get("security", {})
-    if not isinstance(model_settings, dict) or not isinstance(security, dict):
-        raise CatalogError(f"invalid model or security settings: {settings_path}")
-    auth = security.get("auth", {})
-    if not isinstance(auth, dict):
-        raise CatalogError(f"invalid security.auth settings: {settings_path}")
-    auth_type = optional_string(auth, "selectedType", settings_path)
-    access_method = {
-        "gemini-api-key": "gemini_cli_api_key",
-        None: "gemini_cli_unconfigured",
-    }.get(auth_type, "gemini_cli_other_auth")
-    package_path = package_path or find_gemini_package()
-    manifest_path = package_path / "package.json"
-    package, package_source = read_object(manifest_path)
-    version = optional_string(package, "version", manifest_path)
-    if package.get("name") != "@google/gemini-cli" or not version:
-        raise CatalogError(f"invalid Gemini CLI package name or version: {manifest_path}")
-    model_ids, aliases, bundle_source = bundled_gemini_models(package_path)
-    return {
-        "provider": "google",
-        "access_method": access_method,
-        "generated_at": utc_timestamp(),
-        "client": {"name": "@google/gemini-cli", "version": version},
-        "sources": [settings_source, package_source, bundle_source],
-        "configured": {
-            "model": optional_string(model_settings, "name", settings_path),
-            "reasoning_effort": None,
-        },
-        "cli_default_alias": "auto" if "auto" in aliases else None,
-        "aliases": aliases,
-        "model_list_scope": (
-            "Gemini model IDs declared in the installed CLI's VALID_GEMINI_MODELS set; "
-            "not the full provider catalog or dynamic configuration. Aliases are CLI "
-            "selectors, not resolved model IDs. API access has not been verified."
-        ),
-        "models": [
-            {
-                "id": model_id,
-                "availability": "declared_by_installed_cli",
-                "current_access_verified": False,
-            }
-            for model_id in model_ids
-        ],
-    }
-
-
 def perplexity_local_metadata(binary, arguments):
     allowed = {
         ("--version",), ("search", "web", "--help"),
@@ -396,39 +267,144 @@ def perplexity_catalog(binary, receipt_path):
     }
 
 
-def copilot_version(binary):
-    """Query only the local version with isolated settings and no auto-update."""
+AGY_VERSION = r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]{1,64})?"
+# Documented slugs look like gemini-3.8-flash-high. Slashes, colons and "@" are
+# excluded, so resource names that embed a project ID cannot reach the catalog.
+AGY_MODEL_ID = r"[a-z0-9][a-z0-9._-]{0,127}"
+# Selection aliases, not models.
+AGY_MODEL_ALIASES = {"auto", "recommended"}
+AGY_OBSERVATION_FIELDS = {
+    "schema_version", "observed_at", "evidence", "client_version", "list_complete", "models",
+}
+
+
+def is_label(value):
+    """Accept a short, single-line display label such as `Gemini 3.8 Flash (High)`.
+
+    Anything that looks like an email address, a URL or a Google API key is
+    refused, as are control, format and invisible characters.
+    """
+    return (
+        isinstance(value, str) and 0 < len(value) <= 128 and value == value.strip()
+        and value.isprintable() and re.search(r"@|://|AIza", value) is None
+    )
+
+
+def find_antigravity_binary(binary):
+    """Locate agy without running it: explicit path, then PATH, then the installer default."""
+    if binary is not None:
+        executable = Path(binary).resolve()
+        if not executable.is_file():
+            raise CatalogError(f"missing Antigravity CLI executable: {executable}")
+        return executable
+    executable = shutil.which("agy")
+    if executable is not None:
+        return Path(executable).resolve()
+    default = Path.home() / ".local/bin/agy"
+    if default.is_file() and os.access(default, os.X_OK):
+        return default.resolve()
+    return None
+
+
+def antigravity_sandbox(binary, directory):
+    """Build the bubblewrap command that runs `agy --version` offline and without the home.
+
+    New user, network, PID, IPC and UTS namespaces leave the command only a
+    loopback interface. The user's home directory, the per-user runtime
+    directory (D-Bus and keyring sockets) and the temporary directories are
+    replaced by empty file systems. Only the executable (read-only) and the
+    throwaway home are mounted back. Without bubblewrap the command is not run.
+    """
+    bwrap = shutil.which("bwrap")
+    if bwrap is None:
+        raise CatalogError(
+            "bubblewrap (bwrap) is required to run agy --version without network access"
+        )
+    private = [
+        Path.home(), Path("/run/user") / str(os.getuid()), Path("/tmp"), Path("/var/tmp"),
+        Path(tempfile.gettempdir()),
+    ]
+    if os.environ.get("XDG_RUNTIME_DIR"):
+        private.append(Path(os.environ["XDG_RUNTIME_DIR"]))
+    try:
+        # agy looks up the account's home with getpwuid, whatever HOME says.
+        private.append(Path(pwd.getpwuid(os.getuid()).pw_dir))
+    except KeyError:
+        pass
+    hidden = []
+    # Parents first; a directory inside one already hidden needs no mount of its own.
+    for path in sorted({path.resolve() for path in private if path.is_dir()},
+                       key=lambda path: (len(path.parts), str(path))):
+        if path.parent != path and not any(path.is_relative_to(parent) for parent in hidden):
+            hidden.append(path)
+    command = [
+        bwrap, "--die-with-parent", "--new-session",
+        # Includes --unshare-net: the command sees only a loopback interface.
+        "--unshare-all",
+        "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
+    ]
+    for path in hidden:
+        command += ["--tmpfs", str(path)]
+    return command + [
+        "--ro-bind", str(binary), str(binary),
+        "--bind", directory, directory, "--chdir", directory,
+        "--", str(binary), "--version",
+    ]
+
+
+def antigravity_version(binary):
+    """Run only `agy --version`, in a network-less sandbox that hides the home directory.
+
+    The sandbox from antigravity_sandbox enforces the isolation, so it does not
+    depend on how a given agy release behaves; if bubblewrap is missing or
+    cannot create the namespaces, agy does not run. HOME, the XDG directories
+    and TMPDIR also point to a throwaway directory, the self-updater is
+    switched off, and the environment excludes API keys, tokens and the D-Bus
+    session address. A traced run of 1.2.12 showed that the command opens no
+    network socket, writes no file and starts no other process.
+    """
     environment = {
         key: os.environ[key] for key in ("PATH", "LANG", "LC_ALL")
         if key in os.environ
     }
     try:
-        with tempfile.TemporaryDirectory(prefix="copilot-metadata-") as directory:
-            environment.update({"COPILOT_HOME": directory, "CI": "1"})
+        with tempfile.TemporaryDirectory(prefix="agy-metadata-") as directory:
+            home = Path(directory)
+            environment.update({
+                "HOME": directory,
+                "XDG_CONFIG_HOME": str(home / ".config"),
+                "XDG_CACHE_HOME": str(home / ".cache"),
+                "XDG_DATA_HOME": str(home / ".local/share"),
+                "XDG_STATE_HOME": str(home / ".local/state"),
+                "XDG_RUNTIME_DIR": directory,
+                "TMPDIR": directory,
+                # Only the exact lowercase value disables the self-updater.
+                "AGY_CLI_DISABLE_AUTO_UPDATE": "true",
+            })
+            command = antigravity_sandbox(binary, directory)
             with tempfile.TemporaryFile() as output:
                 result = subprocess.run(
-                    [str(binary), "--no-auto-update", "--version"],
-                    stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.DEVNULL,
+                    command, stdin=subprocess.DEVNULL,
+                    stdout=output, stderr=subprocess.DEVNULL,
                     cwd=directory, env=environment, timeout=10,
                 )
                 output.seek(0)
                 captured = output.read(65537)
         if result.returncode != 0 or len(captured) > 65536:
-            raise CatalogError("Copilot CLI version command failed or exceeded output limit")
-        lines = captured.decode("utf-8").splitlines()
-        version = re.fullmatch(
-            r"GitHub Copilot CLI ([0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?)\.?",
-            lines[0] if lines else "",
-        )
+            raise CatalogError(
+                "Antigravity CLI version command failed, could not be sandboxed "
+                "or exceeded output limit"
+            )
+        version = re.fullmatch(f"({AGY_VERSION})\n?", captured.decode("utf-8"))
         if version is None:
-            raise CatalogError("unrecognized Copilot CLI version output")
+            raise CatalogError("unrecognised Antigravity CLI version output")
         return version.group(1)
     except (OSError, subprocess.SubprocessError, UnicodeError):
-        raise CatalogError("cannot read local Copilot CLI version") from None
+        raise CatalogError("cannot read local Antigravity CLI version") from None
 
 
-def copilot_model_observations(path):
-    """Validate a recorded picker snapshot without treating it as a live query."""
+def antigravity_model_observations(path):
+    """Validate an operator-recorded `agy models` snapshot; the refresh never lists models."""
     if path is None:
         return {}, None
     data, source = read_object(path, optional=True)
@@ -436,187 +412,147 @@ def copilot_model_observations(path):
         return data, source
 
     def invalid(field):
-        raise CatalogError(f"invalid Copilot model observations {field}: {path}") from None
+        raise CatalogError(f"invalid Antigravity model observations {field}: {path}") from None
 
-    def nonempty_string(value):
-        return isinstance(value, str) and bool(value.strip())
-
-    if type(data.get("schema_version")) is not int or data["schema_version"] != 1:
+    if set(data) != AGY_OBSERVATION_FIELDS:
+        invalid("fields")
+    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
         invalid("schema_version")
-    if data.get("evidence") != "copilot_cli_model_picker":
+    if data["evidence"] != "agy_models_command":
         invalid("evidence")
-    if data.get("model_id_source") != "copilot_model_command_validation":
-        invalid("model_id_source")
-    observed_at = data.get("observed_at")
+    observed_at = data["observed_at"]
     if not isinstance(observed_at, str) or not re.fullmatch(
-        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)",
-        observed_at,
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)", observed_at,
     ):
         invalid("observed_at")
     try:
-        datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+        observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
     except ValueError:
         invalid("observed_at")
-    if not nonempty_string(data.get("client_version")):
+    if observed > datetime.now(timezone.utc):
+        invalid("observed_at")
+    if not isinstance(data["client_version"], str) or not re.fullmatch(
+        AGY_VERSION, data["client_version"]
+    ):
         invalid("client_version")
-    if type(data.get("list_complete")) is not bool:
+    if type(data["list_complete"]) is not bool:
         invalid("list_complete")
 
-    selected = data.get("selected")
-    if not isinstance(selected, dict) or not nonempty_string(selected.get("model")):
-        invalid("selected.model")
-    if selected.get("reasoning_effort") is not None and not nonempty_string(
-        selected["reasoning_effort"]
-    ):
-        invalid("selected.reasoning_effort")
-    aliases = data.get("aliases")
-    if not isinstance(aliases, list) or any(not nonempty_string(item) for item in aliases):
-        invalid("aliases")
-    if len(set(aliases)) != len(aliases):
-        invalid("aliases")
-
-    entries = data.get("models")
-    if not isinstance(entries, list):
+    entries = data["models"]
+    # An empty list is what agy returns before sign-in, so it is not evidence.
+    if not isinstance(entries, list) or not entries:
         invalid("models")
-    model_ids = set()
+    model_ids, labels = set(), set()
     for entry in entries:
-        if not isinstance(entry, dict):
+        if not isinstance(entry, dict) or set(entry) != {"id", "display_name"}:
             invalid("models entry")
-        model_id = entry.get("id")
+        model_id = entry["id"]
         if (
-            not nonempty_string(model_id) or model_id != model_id.strip()
-            or model_id in model_ids or model_id == "auto" or model_id in aliases
+            not isinstance(model_id, str) or model_id in model_ids
+            or model_id in AGY_MODEL_ALIASES or not re.fullmatch(AGY_MODEL_ID, model_id)
         ):
             invalid("model id")
         model_ids.add(model_id)
-        if not nonempty_string(entry.get("display_name")):
+        # Labels must be unique too: settings save a label, not a slug.
+        label = entry["display_name"]
+        if not is_label(label) or label in labels:
             invalid("display_name")
-        if type(entry.get("selectable")) is not bool:
-            invalid("selectable")
-        expected_restriction = None if entry["selectable"] else "not_in_current_plan"
-        if entry.get("restriction") != expected_restriction:
-            invalid("restriction")
+        labels.add(label)
 
     source.update({
-        key: data[key] for key in (
-            "schema_version", "observed_at", "evidence", "model_id_source", "client_version"
-        )
+        key: data[key] for key in ("schema_version", "observed_at", "evidence", "client_version")
     })
     return data, source
 
 
-def copilot_catalog(home, binary, observations_path=None):
-    """Inspect installation metadata and preferences without starting a session."""
-    settings_path = home / "settings.json"
-    settings, settings_source = read_object(settings_path, optional=True, jsonc=True)
-    model = optional_string(settings, "model", settings_path)
-    effort = optional_string(settings, "effortLevel", settings_path)
+def antigravity_catalog(home, binary, observations_path=None):
+    """Record the installed agy client and saved preferences without starting a session.
+
+    Antigravity CLI shares ~/.gemini with the retired Gemini CLI. Only
+    antigravity-cli/settings.json is read there; account, credential, log,
+    conversation, project and legacy Gemini CLI files are not.
+    """
+    settings_path = home / "antigravity-cli" / "settings.json"
+    settings, settings_source = read_object(settings_path, optional=True)
+    model = settings.get("model")
+    if model is not None and not is_label(model):
+        raise CatalogError(f"invalid model: {settings_path}")
+    # Only the exact string "gemini" selects the API-key route, and the CLI
+    # ignores any other string. A non-string value is invalid settings.
+    api_key_route = optional_string(settings, "modelProvider", settings_path) == "gemini"
     sources = [settings_source] if settings_source is not None else []
-    observations, observation_source = copilot_model_observations(observations_path)
+    observations, observation_source = antigravity_model_observations(observations_path)
     if observation_source is not None:
         sources.append(observation_source)
 
-    executable = binary if binary is not None else shutil.which("copilot")
+    executable = find_antigravity_binary(binary)
     version = None
     if executable is not None:
-        executable = Path(executable).resolve()
-        if not executable.is_file():
-            raise CatalogError(f"missing Copilot CLI executable: {executable}")
+        version = antigravity_version(executable)
         sources.append({
             "path": str(executable),
             "modified_at": utc_timestamp(executable.stat().st_mtime),
             "evidence": "local_executable_present",
+            "metadata_commands": [["--version"]],
         })
-        for directory in executable.parents:
-            manifest_path = directory / "package.json"
-            if not manifest_path.is_file():
-                continue
-            package, package_source = read_object(manifest_path)
-            if package.get("name") != "@github/copilot":
-                continue
-            version = optional_string(package, "version", manifest_path)
-            if not version:
-                raise CatalogError(f"missing Copilot CLI package version: {manifest_path}")
-            sources.append(package_source)
-            break
-        if version is None:
-            version = copilot_version(executable)
-            sources[-1]["metadata_commands"] = [["--no-auto-update", "--version"]]
 
     catalog = {
-        "provider": "github",
-        "access_method": "github_copilot_cli",
-        "authentication_evidence": "not_checked",
-        "subscription_plan": None,
+        "provider": "google",
+        "access_method": (
+            "antigravity_cli_gemini_api_key" if api_key_route else "antigravity_cli"
+        ),
+        "authentication_evidence": (
+            "settings_model_provider" if api_key_route else "not_checked"
+        ),
         "current_access_verified": False,
         "generated_at": utc_timestamp(),
         "client": {
-            "name": "GitHub Copilot CLI",
+            "name": "Antigravity CLI",
             "installed": executable is not None,
             "version": version,
         },
         "sources": sources,
-        "configured": {"model": model, "reasoning_effort": effort},
+        "configured": {"model": model, "reasoning_effort": None},
         "model_list_scope": (
-            "Local Copilot CLI installation metadata and saved user-level model "
-            "preferences only. An empty list means no explicit model ID was observed. "
-            "Auto is a routing selector and is excluded from model IDs. Preferences "
-            "do not establish available models or account access; editor integrations, "
-            "session overrides, and repository settings are outside this inventory."
+            "No model list recorded. Antigravity CLI keeps no local model list: agy "
+            "fetches the signed-in account's models from Google at run time, and this "
+            "refresh does not run agy models. An empty list means nothing was recorded, "
+            "not that no models are available. configured.model is the picker label "
+            "saved in antigravity-cli/settings.json, written only after the default is "
+            "changed; project settings and the --model and --effort flags can override "
+            "it. Authentication and model access have not been verified."
         ),
-        "models": [
-            {
-                "id": model,
-                "availability": "configured_model_preference",
-                "current_access_verified": False,
-            }
-        ] if model and model != "auto" else [],
+        "models": [],
     }
     if observation_source is not None:
-        models = []
-        unavailable_models = []
-        observed_ids = set()
-        for entry in observations["models"]:
-            observed_ids.add(entry["id"])
-            observed_model = {
-                "id": entry["id"],
-                "display_name": entry["display_name"],
-                "availability": (
-                    "listed_in_copilot_model_picker" if entry["selectable"]
-                    else "blocked_by_copilot_plan"
-                ),
-                "observed_at": observations["observed_at"],
-                "current_access_verified": False,
-            }
-            if entry["selectable"]:
-                models.append(observed_model)
-            else:
-                observed_model["restriction"] = entry["restriction"]
-                unavailable_models.append(observed_model)
-        models.extend(
-            entry for entry in catalog["models"]
-            if entry["id"] not in observed_ids and entry["id"] not in observations["aliases"]
+        scope = (
+            "Models from an operator-recorded agy models snapshot taken at "
+            "model_list_observed_at. Refresh preserves the original observation "
+            "time and does not query the account model list. The list depends on "
+            "the account's plan and sign-in route; entries do not establish "
+            "successful inference or current access, and account, plan, sign-in or "
+            "client changes require a new observation. configured.model is the "
+            "picker label saved in antigravity-cli/settings.json, not a model slug."
         )
+        if version is not None and version != observations["client_version"]:
+            scope += (
+                f" The snapshot was recorded with agy {observations['client_version']}, "
+                f"but agy {version} is installed, so a new observation is due."
+            )
         catalog.update({
-            "models": models,
-            "unavailable_models": unavailable_models,
-            "aliases": observations["aliases"],
-            "observed_selection": {
-                "model": observations["selected"]["model"],
-                "reasoning_effort": observations["selected"].get("reasoning_effort"),
-            },
             "model_list_observed_at": observations["observed_at"],
             "model_list_complete": observations["list_complete"],
-            "model_list_scope": (
-                "Recorded Copilot CLI model-picker observations at model_list_observed_at, "
-                "plus any saved user-level model preference. Plan-blocked observations "
-                "are listed separately under unavailable_models. Auto is a routing alias. "
-                "Refresh preserves the original observation time and does not query the "
-                "account model list. Picker entries and preferences do not establish "
-                "successful inference or current access; account, client, and policy "
-                "changes require a new observation. Editor integrations are outside "
-                "this inventory."
-            ),
+            "model_list_scope": scope,
+            "models": [
+                {
+                    "id": entry["id"],
+                    "display_name": entry["display_name"],
+                    "availability": "listed_in_agy_model_list",
+                    "observed_at": observations["observed_at"],
+                    "current_access_verified": False,
+                }
+                for entry in observations["models"]
+            ],
         })
     return catalog
 
@@ -643,34 +579,47 @@ def main():
     parser.add_argument("--codex-home", type=Path, default=Path.home() / ".codex")
     parser.add_argument("--claude-home", type=Path, default=Path.home() / ".claude")
     parser.add_argument("--claude-state", type=Path, default=Path.home() / ".claude.json")
-    parser.add_argument("--gemini-home", type=Path, default=Path.home() / ".gemini")
-    parser.add_argument("--gemini-package", type=Path, help="Gemini CLI npm package directory")
     parser.add_argument("--perplexity-binary", type=Path, help="Path to the pplx executable")
     parser.add_argument(
         "--perplexity-receipt", type=Path,
         default=Path.home() / ".config/pplx/pplx-receipt.json",
     )
     parser.add_argument(
-        "--copilot-home", type=Path,
-        default=Path(os.environ.get("COPILOT_HOME") or Path.home() / ".copilot"),
-        help="Copilot CLI settings directory (default: COPILOT_HOME or ~/.copilot)",
+        "--antigravity-home", type=Path, default=Path.home() / ".gemini",
+        help="Directory Antigravity CLI shares with the retired Gemini CLI (default: ~/.gemini)",
     )
-    parser.add_argument("--copilot-binary", type=Path, help="Path to the Copilot CLI executable")
     parser.add_argument(
-        "--copilot-model-observations", type=Path,
-        default=Path(__file__).resolve().parent / "github-copilot/observed-models.json",
-        help="Recorded Copilot CLI model-picker snapshot (optional if absent)",
+        "--antigravity-binary", type=Path,
+        help="Path to the agy executable (default: agy on PATH, then ~/.local/bin/agy)",
+    )
+    parser.add_argument(
+        "--antigravity-model-observations", type=Path,
+        default=Path(__file__).resolve().parent / "antigravity/observed-models.json",
+        help="Recorded agy models snapshot (optional if absent)",
+    )
+    parser.add_argument(
+        "--check-antigravity-model-observations", type=Path, metavar="PATH",
+        help="Validate an agy models snapshot and exit without refreshing any catalog",
     )
     args = parser.parse_args()
+    if args.check_antigravity_model_observations is not None:
+        path = args.check_antigravity_model_observations.expanduser().resolve()
+        try:
+            if antigravity_model_observations(path)[1] is None:
+                raise CatalogError(f"missing source: {path}")
+        except CatalogError as error:
+            print(f"antigravity: {error}", file=sys.stderr)
+            return 1
+        print(f"antigravity: valid model observations: {path}")
+        return 0
     destination = Path(__file__).resolve().parent
     failed = False
     for provider, builder, paths in (
         ("openai", openai_catalog, (args.codex_home,)),
         ("anthropic", anthropic_catalog, (args.claude_home, args.claude_state)),
-        ("gemini", gemini_catalog, (args.gemini_home, args.gemini_package)),
         ("perplexity", perplexity_catalog, (args.perplexity_binary, args.perplexity_receipt)),
-        ("github-copilot", copilot_catalog, (
-            args.copilot_home, args.copilot_binary, args.copilot_model_observations
+        ("antigravity", antigravity_catalog, (
+            args.antigravity_home, args.antigravity_binary, args.antigravity_model_observations
         )),
     ):
         output = destination / provider / "models.json"

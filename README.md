@@ -13,8 +13,8 @@ source .venv/bin/activate
 ```
 
 The Python scripts use only the standard library; no additional Python packages
-are required. The benchmark runner uses Bash, `jq`, `curl`, Ollama, and local
-system/GPU telemetry tools, including `nvidia-smi`.
+are required. The benchmark runner uses Bash, `jq`, `curl`, a running llama.cpp
+`llama-server`, and local system/GPU telemetry tools, including `nvidia-smi`.
 
 ## Benchmarks
 
@@ -25,13 +25,17 @@ rubrics, and evaluation guidance. Preview fixture population with:
 python experiments/populate-benchmarks.py --dry-run
 ```
 
-Run a benchmark against a locally available Ollama model:
+Start `llama-server` with the model to test, then run a benchmark against it:
 
 ```sh
+llama-server -m <model>.gguf --port 8080
 bash experiments/run-benchmark.sh <model> coding/python-refactor
 ```
 
-Recorded runs and model responses live in `experiments/results/`.
+The runner talks to `http://127.0.0.1:8080` unless `LLAMA_SERVER_URL` says
+otherwise, and records runs as machine `AI01` unless `BENCHMARK_MACHINE_ID`
+says otherwise. Recorded runs and model responses are written to
+`experiments/results/`, which the first run creates.
 
 ## Model catalogs
 
@@ -49,5 +53,5 @@ python -m unittest discover -s models -p 'test_*.py'
 bash -n experiments/run-benchmark.sh
 ```
 
-These tests run offline and mock model requests and hardware telemetry. They
-require Bash and `jq`.
+These tests run offline and mock model requests, CLI calls and hardware
+telemetry. They require Bash and `jq`.
