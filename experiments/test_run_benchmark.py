@@ -92,18 +92,28 @@ elif url.path == '/v1/chat/completions':
 else:
     sys.exit('Unexpected curl invocation: ' + repr(arguments))
 ''')
+        # Two GPUs, written line by line: a reader that stops after the first
+        # line must not kill the command with SIGPIPE.
         self.mock_command('nvidia-smi', '''#!/usr/bin/env bash
 printf 'nvidia-smi\\n' >> "$BENCHMARK_TEST_RUNTIME_LOG"
 printf 'Mock GPU, 16384, 2048, 0, 42, 50.0\\n'
+sleep 0.05
+printf 'Second GPU, 16384, 1024, 0, 40, 30.0\\n'
 ''')
         self.mock_command('free', '''#!/usr/bin/env bash
 printf 'free\\n' >> "$BENCHMARK_TEST_RUNTIME_LOG"
 printf '              total used free shared buff/cache available\\n'
 printf 'Mem: 32000000000 8000000000 16000000000 0 8000000000 24000000000\\n'
 ''')
+        # Written line by line, like the real lscpu, so a reader that exits at
+        # its first match would leave later writes to fail with SIGPIPE.
         self.mock_command('lscpu', '''#!/usr/bin/env bash
 printf 'lscpu\\n' >> "$BENCHMARK_TEST_RUNTIME_LOG"
-printf 'Model name: Mock CPU\\nCore(s) per socket: 4\\nCPU(s): 8\\n'
+printf 'Model name: Mock CPU\\n'
+sleep 0.05
+printf 'Core(s) per socket: 4\\n'
+sleep 0.05
+printf 'CPU(s): 8\\n'
 ''')
 
     def mock_command(self, name, content):
@@ -193,6 +203,9 @@ printf 'Model name: Mock CPU\\nCore(s) per socket: 4\\nCPU(s): 8\\n'
                     'context_tokens': 8192,
                     'slots': 1,
                 })
+                self.assertEqual(record['cpu'], {'model': 'Mock CPU', 'cores': 4, 'threads': 8})
+                self.assertEqual(record['system_before']['gpu']['name'], 'Mock GPU')
+                self.assertEqual(record['system_after']['gpu']['vram_used_mb'], 2048)
                 raw = json.loads((self.experiments / f'results/outputs/AI01-{index:04d}.json').read_text())
                 self.assertEqual(raw['choices'][0]['message']['content'], 'Mock answer')
 

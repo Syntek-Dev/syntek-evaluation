@@ -158,12 +158,15 @@ capture_system_telemetry() {
         }'
     )
 
+    # Capture the whole output, then keep the first GPU. Piping into
+    # `head -n 1` can kill nvidia-smi with SIGPIPE when it lists more than one
+    # GPU, and pipefail would turn that into a failed run.
     GPU_TELEMETRY=$(
         nvidia-smi \
             --query-gpu=name,memory.total,memory.used,utilization.gpu,temperature.gpu,power.draw \
-            --format=csv,noheader,nounits |
-        head -n 1
+            --format=csv,noheader,nounits
     )
+    GPU_TELEMETRY="${GPU_TELEMETRY%%$'\n'*}"
 
     IFS=',' read -r \
         "${prefix}_GPU_NAME" \
@@ -225,31 +228,32 @@ WALL_TIME_NS=$((END_TIME_NS - START_TIME_NS))
 # CPU telemetry
 # ------------------------------------------------------------
 
+# Read lscpu once and parse the captured text: awk exits at its first match,
+# which would kill a piped lscpu with SIGPIPE and fail the run under pipefail.
+LSCPU_OUTPUT=$(lscpu)
+
 CPU_MODEL=$(
-    lscpu |
     awk -F: '/Model name:/ {
         sub(/^[ \t]+/, "", $2)
         print $2
         exit
-    }'
+    }' <<< "$LSCPU_OUTPUT"
 )
 
 CPU_CORES=$(
-    lscpu |
     awk -F: '/Core\(s\) per socket:/ {
         gsub(/ /, "", $2)
         print $2
         exit
-    }'
+    }' <<< "$LSCPU_OUTPUT"
 )
 
 CPU_THREADS=$(
-    lscpu |
     awk -F: '/^CPU\(s\):/ {
         gsub(/ /, "", $2)
         print $2
         exit
-    }'
+    }' <<< "$LSCPU_OUTPUT"
 )
 
 # ------------------------------------------------------------
